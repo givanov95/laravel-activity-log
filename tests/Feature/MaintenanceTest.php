@@ -113,4 +113,52 @@ class MaintenanceTest extends TestCase
 
         $this->artisan('activity-log:prune', ['--days' => '0'])->assertFailed();
     }
+
+    public function test_scrub_leaves_the_data_of_others_in_entries_the_model_only_made(): void
+    {
+        $receptionist = User::create(['name' => 'Desk', 'email' => 'desk@example.test']);
+        $customer = User::create(['name' => 'Maria', 'email' => 'maria@example.test']);
+        config(['activity-log.store_ip' => true]);
+        $this->app['request']->server->set('REMOTE_ADDR', '10.1.2.3');
+
+        $edit = ActivityLog::record('customer.updated')->by(Actor::user($receptionist, 'receptionist'))->on($customer)
+            ->changes(['email' => ['m@x.test', 'maria@example.test']])->with(['file_name' => 'x.pdf'])->save();
+
+        ActivityLog::scrub($receptionist, fields: ['email'], label: 'Former employee', properties: ['file_name']);
+
+        $edit->refresh();
+        $this->assertSame(['old' => 'm@x.test', 'new' => 'maria@example.test'], $edit->changes['email']);
+        $this->assertSame(['file_name' => 'x.pdf'], $edit->properties);
+        $this->assertSame('Former employee', $edit->actor_label);
+        $this->assertNull($edit->ip_address);
+    }
+
+    public function test_an_unsaved_subject_or_scope_is_refused(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        ActivityLog::record('x')->on(new Post(['title' => 'draft']));
+    }
+
+    public function test_an_entry_and_its_related_rows_are_written_together(): void
+    {
+        $post = Post::create(['title' => 'P']);
+        $unsavable = new class() extends \Illuminate\Database\Eloquent\Model {
+            protected $table = 'posts';
+
+            public function getKey(): mixed
+            {
+                return ['not', 'a', 'key'];
+            }
+        };
+
+        try {
+            ActivityLog::record('x')->relatedTo($post, $unsavable)->save();
+            $this->fail('The related row was written.');
+        } catch (\Throwable) {
+        }
+
+        $this->assertSame(0, ActivityLogEntry::count());
+        $this->assertSame(0, ActivityLogRelation::count());
+    }
 }

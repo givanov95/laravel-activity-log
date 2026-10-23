@@ -59,16 +59,22 @@ class ActivityLogger
             'changes'       => $changes->isEmpty() ? null : $changes->toArray(),
             'properties'    => $properties === [] ? null : $properties,
             'ip_address'    => $this->ip(),
-        ])->save();
+        ]);
 
-        foreach ($pending->related() as $related) {
-            $relation = new ActivityLogRelation();
-            $relation->forceFill([
+        // The entry and its related rows together, also on a separate log connection.
+        $entry->getConnection()->transaction(function () use ($entry, $pending): void {
+            $entry->save();
+
+            $rows = array_map(fn (Model $related): array => [
                 'activity_log_id' => $entry->getKey(),
                 'related_type'    => $related->getMorphClass(),
                 'related_id'      => $related->getKey(),
-            ])->save();
-        }
+            ], $pending->related());
+
+            if ($rows !== []) {
+                $this->relationsQuery()->insert($rows);
+            }
+        });
 
         return $entry;
     }
@@ -90,11 +96,12 @@ class ActivityLogger
     }
 
     /**
-     * Remove personal data of a model from the entries that concern it (its
-     * subject, actor, scope or related entries): the values of $fields become
-     * masked, the $properties keys are dropped, and where the model is the
-     * actor or the subject its stored label becomes $label. Returns the
-     * number of entries changed.
+     * Remove personal data of a model from the entries that concern it. In
+     * the entries about it (it is the subject or a related model) the values
+     * of $fields become masked and the $properties keys are dropped; where it
+     * is the actor or the subject its stored label becomes $label; where it
+     * is the actor the stored IP address goes. Entries it only made keep the
+     * data of the others they concern. Returns the number of entries changed.
      *
      * @param list<string> $fields
      * @param list<string> $properties
@@ -104,20 +111,23 @@ class ActivityLogger
         $type = $model->getMorphClass();
         $id = $model->getKey();
         $count = 0;
+        $related = $this->relationsQuery()->where('related_type', $type)->where('related_id', $id)->pluck('activity_log_id')->flip()->all();
 
         $this->entries()
             ->where(fn (Builder $q) => $q
                 ->where(fn (Builder $q) => $q->where('subject_type', $type)->where('subject_id', $id))
                 ->orWhere(fn (Builder $q) => $q->where('actor_type', $type)->where('actor_id', $id))
-                ->orWhere(fn (Builder $q) => $q->where('scope_type', $type)->where('scope_id', $id))
                 ->orWhereIn('id', $this->relationsQuery()->select('activity_log_id')->where('related_type', $type)->where('related_id', $id)))
             ->orderBy('id')
-            ->chunkById(500, function ($rows) use ($type, $id, $fields, $label, $properties, &$count): void {
+            ->chunkById(500, function ($rows) use ($type, $id, $fields, $label, $properties, $related, &$count): void {
                 foreach ($rows as $row) {
                     $update = [];
+                    $isSubject = $row->subject_type === $type && (string) $row->subject_id === (string) $id;
+                    $isActor = $row->actor_type === $type && (string) $row->actor_id === (string) $id;
+                    $about = $isSubject || isset($related[$row->id]);
 
                     $changes = $row->changes === null ? null : json_decode((string) $row->changes, true);
-                    if (is_array($changes)) {
+                    if ($about && is_array($changes)) {
                         $scrubbed = $changes;
                         foreach ($fields as $field) {
                             if (array_key_exists($field, $scrubbed)) {
@@ -130,18 +140,22 @@ class ActivityLogger
                     }
 
                     $props = $row->properties === null ? null : json_decode((string) $row->properties, true);
-                    if (is_array($props) && $properties !== []) {
+                    if ($about && is_array($props) && $properties !== []) {
                         $kept = array_diff_key($props, array_flip($properties));
                         if ($kept !== $props) {
                             $update['properties'] = $kept === [] ? null : json_encode($kept);
                         }
                     }
 
-                    if ($label !== null && $row->actor_type === $type && (string) $row->actor_id === (string) $id && $row->actor_label !== $label) {
+                    if ($label !== null && $isActor && $row->actor_label !== $label) {
                         $update['actor_label'] = Labels::limit($label);
                     }
 
-                    if ($label !== null && $row->subject_type === $type && (string) $row->subject_id === (string) $id && $row->subject_label !== $label) {
+                    if ($isActor && $row->ip_address !== null) {
+                        $update['ip_address'] = null;
+                    }
+
+                    if ($label !== null && $isSubject && $row->subject_label !== $label) {
                         $update['subject_label'] = Labels::limit($label);
                     }
 

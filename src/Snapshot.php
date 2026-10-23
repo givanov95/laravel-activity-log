@@ -66,20 +66,17 @@ final class Snapshot
      */
     private static function state(Model $model, array $relations): array
     {
-        $state = [];
-
-        foreach ($model->getAttributes() as $key => $raw) {
-            $state[$key] = Values::cast($model, $key, $raw);
-        }
+        $state = Values::castAll($model, $model->getAttributes());
 
         foreach ($relations as $relation => $attribute) {
-            $values = $model->{$relation}()->get()
-                ->map(fn (Model $related): mixed => Values::normalize($related->getAttribute($attribute ?? $related->getKeyName())))
+            $query = $model->{$relation}();
+            $related = $query->getRelated();
+
+            $state[$relation] = $query->pluck($related->qualifyColumn($attribute ?? $related->getKeyName()))
+                ->map(fn (mixed $value): mixed => Values::normalize($value))
                 ->sort()
                 ->values()
                 ->all();
-
-            $state[$relation] = $values;
         }
 
         return $state;

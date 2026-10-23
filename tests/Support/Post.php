@@ -16,6 +16,7 @@ class Post extends Model
     protected $casts = [
         'status'       => PostStatus::class,
         'published_at' => 'immutable_datetime',
+        'private'      => 'encrypted',
     ];
 
     public function tags(): BelongsToMany

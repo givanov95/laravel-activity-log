@@ -42,17 +42,54 @@ final class Values
      */
     public static function cast(Model $model, string $key, mixed $raw): mixed
     {
-        if ($raw === null) {
-            return null;
+        return self::castAll($model, [$key => $raw])[$key];
+    }
+
+    /**
+     * Raw (database) attributes as the model would cast them, through one
+     * copy of the model.
+     *
+     * @param array<string, mixed> $raw
+     *
+     * @return array<string, mixed>
+     */
+    public static function castAll(Model $model, array $raw): array
+    {
+        $copy = $model->newInstance();
+        $copy->setRawAttributes($raw);
+        $values = [];
+
+        foreach ($raw as $key => $value) {
+            try {
+                $values[$key] = $value === null ? null : self::normalize($copy->getAttribute($key));
+            } catch (\Throwable) {
+                $values[$key] = self::normalize($value);
+            }
         }
 
-        try {
-            $copy = $model->newInstance();
-            $copy->setRawAttributes([$key => $raw]);
+        return $values;
+    }
 
-            return self::normalize($copy->getAttribute($key));
-        } catch (\Throwable) {
-            return self::normalize($raw);
+    /**
+     * Whether two normalized values mean the same, the way Eloquent sees it:
+     * 3 and "3", 1.5 and "1.50", true and 1 are equal.
+     */
+    public static function equivalent(mixed $a, mixed $b): bool
+    {
+        if ($a === $b) {
+            return true;
         }
+
+        if (is_bool($a) || is_bool($b)) {
+            $other = is_bool($a) ? $b : $a;
+
+            return in_array($other, [0, 1, '0', '1'], true) && (bool) $a === (bool) $b;
+        }
+
+        if (is_numeric($a) && is_numeric($b)) {
+            return (string) (0 + $a) === (string) (0 + $b);
+        }
+
+        return false;
     }
 }

@@ -40,10 +40,11 @@ final class Changes implements Arrayable, Countable, JsonSerializable
      */
     public static function make(array $changes): self
     {
+        $masked = (array) config('activity-log.masked_attributes', []);
         $items = [];
 
         foreach ($changes as $field => $change) {
-            if (is_array($change) && ($change['masked'] ?? false) === true) {
+            if (in_array($field, $masked, true) || (is_array($change) && ($change['masked'] ?? false) === true)) {
                 $items[$field] = ['masked' => true];
 
                 continue;
@@ -86,14 +87,14 @@ final class Changes implements Arrayable, Countable, JsonSerializable
             throw new \LogicException('Changes::fromModel() needs Laravel 12 or later. On Laravel 11 use Changes::snapshot($model) before the change and ->diff() after it.');
         }
 
+        $keys = array_keys($model->getChanges());
         $previous = $model->getPrevious();
+        $old = Values::castAll($model, array_combine($keys, array_map(fn (string $key): mixed => $previous[$key] ?? null, $keys)));
+        $new = Values::castAll($model, array_combine($keys, array_map(fn (string $key): mixed => $model->getAttributes()[$key] ?? null, $keys)));
         $changes = [];
 
-        foreach (array_keys($model->getChanges()) as $key) {
-            $changes[$key] = [
-                'old' => Values::cast($model, $key, $previous[$key] ?? null),
-                'new' => Values::cast($model, $key, $model->getAttributes()[$key] ?? null),
-            ];
+        foreach ($keys as $key) {
+            $changes[$key] = ['old' => $old[$key], 'new' => $new[$key]];
         }
 
         return self::filtered($model, $changes, $only, $except);
@@ -225,11 +226,12 @@ final class Changes implements Arrayable, Countable, JsonSerializable
                 continue;
             }
 
-            if (in_array($field, $masked, true)) {
-                $items[$field] = ['masked' => true];
-            } elseif ($change['old'] !== $change['new']) {
-                $items[$field] = $change;
+            // Unchanged first: a hidden field that did not change is not logged.
+            if (Values::equivalent($change['old'], $change['new'])) {
+                continue;
             }
+
+            $items[$field] = in_array($field, $masked, true) ? ['masked' => true] : $change;
         }
 
         return new self($items);
@@ -242,7 +244,13 @@ final class Changes implements Arrayable, Countable, JsonSerializable
      */
     public static function maskedFor(Model $model): array
     {
-        return array_values(array_unique([...(array) config('activity-log.masked_attributes', []), ...$model->getHidden()]));
+        // Encrypted columns stay encrypted: the log never holds their plaintext.
+        $encrypted = array_keys(array_filter(
+            $model->getCasts(),
+            fn (string $cast): bool => str_starts_with($cast, 'encrypted') || str_contains($cast, 'AsEncrypted'),
+        ));
+
+        return array_values(array_unique([...(array) config('activity-log.masked_attributes', []), ...$model->getHidden(), ...$encrypted]));
     }
 
     /**
@@ -251,13 +259,9 @@ final class Changes implements Arrayable, Countable, JsonSerializable
     private static function attributes(Model $model, string $side): array
     {
         $changes = [];
+        $raw = array_filter($model->getAttributes(), fn (mixed $value, string $key): bool => $value !== null && $key !== $model->getKeyName(), ARRAY_FILTER_USE_BOTH);
 
-        foreach ($model->getAttributes() as $key => $raw) {
-            if ($raw === null || $key === $model->getKeyName()) {
-                continue;
-            }
-
-            $value = Values::cast($model, $key, $raw);
+        foreach (Values::castAll($model, $raw) as $key => $value) {
             $changes[$key] = $side === 'new' ? ['old' => null, 'new' => $value] : ['old' => $value, 'new' => null];
         }
 

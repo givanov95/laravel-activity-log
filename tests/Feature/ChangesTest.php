@@ -142,4 +142,38 @@ class ChangesTest extends TestCase
             $this->markTestSkipped('Changes::fromModel() needs Laravel 12+.');
         }
     }
+
+    public function test_make_masks_the_configured_attributes(): void
+    {
+        $this->assertSame(['password' => ['masked' => true]], Changes::make(['password' => ['old', 'new']])->toArray());
+    }
+
+    public function test_a_snapshot_does_not_report_unchanged_hidden_fields(): void
+    {
+        $user = User::create(['name' => 'Ana', 'email' => 'a@example.test', 'password' => 'secret']);
+        $snapshot = Changes::snapshot($user);
+
+        $user->update(['name' => 'Ana B']);
+
+        $this->assertSame(['name' => ['old' => 'Ana', 'new' => 'Ana B']], $snapshot->diff()->toArray());
+    }
+
+    public function test_a_snapshot_treats_equal_values_of_another_type_as_unchanged(): void
+    {
+        $post = Post::create(['title' => 'A', 'views' => 3]);
+        $post = Post::find($post->id);
+        $snapshot = Changes::snapshot($post);
+
+        $post->fill(['views' => '3', 'title' => 'B'])->save();
+
+        $this->assertSame(['title'], array_keys($snapshot->diff()->toArray()));
+    }
+
+    public function test_encrypted_columns_are_masked(): void
+    {
+        $post = Post::create(['title' => 'A', 'private' => 'diagnosis']);
+
+        $this->assertSame(['masked' => true], Changes::created($post)->toArray()['private']);
+        $this->assertStringNotContainsString('diagnosis', (string) json_encode(Changes::created($post)));
+    }
 }

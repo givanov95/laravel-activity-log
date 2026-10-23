@@ -47,6 +47,8 @@ abstract class TestCase extends Orchestra
             $table->string('status')->default('draft');
             $table->string('secret')->nullable();
             $table->text('body')->nullable();
+            $table->text('private')->nullable();
+            $table->integer('views')->nullable();
             $table->timestamp('published_at')->nullable();
             $table->timestamps();
         });

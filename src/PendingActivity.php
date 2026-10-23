@@ -48,7 +48,7 @@ final class PendingActivity
      */
     public function in(?Model $scope): self
     {
-        $this->scope = $scope;
+        $this->scope = self::saved($scope, 'scope');
 
         return $this;
     }
@@ -59,7 +59,7 @@ final class PendingActivity
      */
     public function on(?Model $subject, ?string $label = null): self
     {
-        $this->subject = $subject;
+        $this->subject = self::saved($subject, 'subject');
         $this->subjectLabel = $label;
 
         return $this;
@@ -104,6 +104,15 @@ final class PendingActivity
         $this->properties = is_array($key) ? [...$this->properties, ...$key] : [...$this->properties, $key => $value];
 
         return $this;
+    }
+
+    private static function saved(?Model $model, string $role): ?Model
+    {
+        if ($model !== null && $model->getKey() === null) {
+            throw new \InvalidArgumentException('The '.$role.' of an activity log entry must be saved first ('.$model::class.' has no key).');
+        }
+
+        return $model;
     }
 
     public function save(): ActivityLogEntry

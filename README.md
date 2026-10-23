@@ -75,7 +75,7 @@ $changes->mask('notes');                            // record that it changed, n
 
 On Laravel 11 `fromModel()` throws (it needs `Model::getPrevious()`, added in Laravel 12): take a `snapshot()` before the change and `diff()` it after.
 
-Values are stored as plain JSON: enums by value, dates as ISO 8601, sets as sorted arrays. Equal old and new values are dropped. A model's `$hidden` attributes and `masked_attributes` are stored as `{"masked": true}`; `ignored_attributes` (timestamps, `remember_token`) are left out.
+Values are stored as plain JSON: enums by value, dates as ISO 8601, sets as sorted arrays. Equal old and new values are dropped (compared the way Eloquent does: `3` and `"3"` are equal). A model's `$hidden` attributes, its `encrypted` casts and `masked_attributes` are stored as `{"masked": true}` when they change — `Changes::make()` masks `masked_attributes` too; `ignored_attributes` (timestamps, `remember_token`) are left out.
 
 ## Reading
 
@@ -98,8 +98,10 @@ Each entry has `action`, `batch_uuid` (shared by the entries of one request or j
 Entries refuse `update()` and `delete()`. These go through the query builder on purpose:
 
 ```php
-// GDPR: mask the person's fields in entries that concern them, drop properties
-// that identify them, and relabel them where they are the actor or the subject.
+// GDPR: in the entries about the person (subject or related) mask their fields and
+// drop properties that identify them; relabel them where they are the actor or the
+// subject; drop the IP of the entries they made. Entries they only made keep the
+// data of the other people in them.
 ActivityLog::scrub($customer, fields: ['name', 'email', 'phone'], label: 'Anonymized customer', properties: ['file_name']);
 
 // The tenant is deleted.
