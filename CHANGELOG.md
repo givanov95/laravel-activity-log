@@ -14,4 +14,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configurable actor resolver for entries saved without `->by()` (default: the signed-in user; system when nobody is signed in).
 - `Changes`: `fromModel()` after save, `created()`, `deleted()`, `make()`, and `snapshot()->diff()` for attributes and relation sets; masking of hidden and configured attributes, `only`/`except`/`mask`/`merge`.
 - Append-only `ActivityLogEntry` model with `inScope`, `forSubject`, `involving`, `byActor`, `byRole`, `action` and `between` scopes; batch uuid per request or job.
+- On Laravel 11 `Changes::fromModel()` throws a `LogicException` (it needs `Model::getPrevious()` from Laravel 12); use `snapshot()->diff()` there.
 - `ActivityLog::scrub()` for GDPR anonymization, `ActivityLog::forgetScope()`, and the `activity-log:prune` command (`retention_days`, off by default).
