@@ -1,0 +1,13 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    uses: givanov95/ci-workflows/.github/workflows/php-package.yml@v1
+    with:
+      php-versions: '["8.3", "8.4"]'
+      phpstan: true
