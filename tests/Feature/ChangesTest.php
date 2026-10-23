@@ -39,6 +39,8 @@ class ChangesTest extends TestCase
 
     public function test_from_model_reads_the_last_save_with_casts_and_ignores_timestamps(): void
     {
+        $this->requiresGetPrevious();
+
         $post = Post::create(['title' => 'Old', 'status' => PostStatus::Draft]);
         $this->travel(1)->minutes();
 
@@ -53,6 +55,8 @@ class ChangesTest extends TestCase
 
     public function test_hidden_and_configured_attributes_are_masked(): void
     {
+        $this->requiresGetPrevious();
+
         $post = Post::create(['title' => 'A']);
         $post->update(['secret' => 'x1', 'title' => 'B']);
         $user = User::create(['name' => 'Ana', 'email' => 'a@example.test', 'password' => 'one']);
@@ -64,6 +68,8 @@ class ChangesTest extends TestCase
 
     public function test_only_except_mask_and_merge(): void
     {
+        $this->requiresGetPrevious();
+
         $post = Post::create(['title' => 'A', 'body' => 'x']);
         $post->update(['title' => 'B', 'body' => 'y']);
 
@@ -115,5 +121,25 @@ class ChangesTest extends TestCase
         Post::whereKey($post->id)->update(['body' => 'y', 'title' => 'C']);
 
         $this->assertSame(['title' => ['old' => 'A', 'new' => 'C']], $snapshot->diff($post->fresh())->toArray());
+    }
+
+    public function test_from_model_explains_itself_on_laravel_11(): void
+    {
+        if (method_exists(Post::class, 'getPrevious')) {
+            $this->markTestSkipped('Laravel 12+ has Model::getPrevious().');
+        }
+
+        $post = Post::create(['title' => 'A']);
+        $post->update(['title' => 'B']);
+
+        $this->expectException(\LogicException::class);
+        Changes::fromModel($post);
+    }
+
+    private function requiresGetPrevious(): void
+    {
+        if (! method_exists(Post::class, 'getPrevious')) {
+            $this->markTestSkipped('Changes::fromModel() needs Laravel 12+.');
+        }
     }
 }

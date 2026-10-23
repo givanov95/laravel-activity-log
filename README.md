@@ -60,7 +60,7 @@ A model implementing `Contracts\HasActivityLabel` labels itself; otherwise the f
 ### Changes
 
 ```php
-Changes::fromModel($model);                        // what the last save() changed — call it after saving
+Changes::fromModel($model);                        // what the last save() changed — call it after saving (Laravel 12+)
 Changes::fromModel($model, only: ['status']);       // or except: [...]
 Changes::created($model);                           // all filled attributes as new values
 Changes::deleted($model);                           // all filled attributes as old values
@@ -72,6 +72,8 @@ $snapshot->diff();                                  // ['roles' => ['old' => ['a
 
 $changes->mask('notes');                            // record that it changed, not the values
 ```
+
+On Laravel 11 `fromModel()` throws (it needs `Model::getPrevious()`, added in Laravel 12): take a `snapshot()` before the change and `diff()` it after.
 
 Values are stored as plain JSON: enums by value, dates as ISO 8601, sets as sorted arrays. Equal old and new values are dropped. A model's `$hidden` attributes and `masked_attributes` are stored as `{"masked": true}`; `ignored_attributes` (timestamps, `remember_token`) are left out.
 

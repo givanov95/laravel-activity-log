@@ -70,12 +70,22 @@ final class Changes implements Arrayable, Countable, JsonSerializable
 
     /**
      * What the last save() of the model changed. Call it after saving.
+     * Needs Laravel 12+ (Model::getPrevious()); on Laravel 11 take a
+     * snapshot() before the change and diff() it after.
      *
      * @param list<string>|null $only
      * @param list<string>      $except
      */
     public static function fromModel(Model $model, ?array $only = null, array $except = []): self
     {
+        // Checked at run time: the package supports Laravel 11, analysed on the latest.
+        static $hasPrevious = null;
+        $hasPrevious ??= (new \ReflectionClass(Model::class))->hasMethod('getPrevious');
+
+        if (! $hasPrevious) {
+            throw new \LogicException('Changes::fromModel() needs Laravel 12 or later. On Laravel 11 use Changes::snapshot($model) before the change and ->diff() after it.');
+        }
+
         $previous = $model->getPrevious();
         $changes = [];
 
