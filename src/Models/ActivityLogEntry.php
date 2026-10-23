@@ -89,7 +89,7 @@ class ActivityLogEntry extends Model
     /**
      * @return HasMany<ActivityLogRelation, $this>
      */
-    public function relations(): HasMany
+    public function relatedModels(): HasMany
     {
         return $this->hasMany(ActivityLogRelation::class, 'activity_log_id');
     }

@@ -51,7 +51,7 @@ class RecordingTest extends TestCase
         $this->assertSame('Hello', $entry->subject_label);
         $this->assertSame(['status' => ['old' => 'draft', 'new' => 'published']], $entry->changes);
         $this->assertSame(['channel' => 'web', 'reason' => 'published'], $entry->properties);
-        $this->assertCount(2, $entry->relations);
+        $this->assertCount(2, $entry->relatedModels);
         $this->assertNotNull($entry->batch_uuid);
         $this->assertNull($entry->ip_address);
     }

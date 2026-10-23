@@ -77,7 +77,7 @@ Values are stored as plain JSON: enums by value, dates as ISO 8601, sets as sort
 
 ## Reading
 
-`Models\ActivityLogEntry` has the morph relations `scope`, `subject`, `actor`, the `relations` of related models, and these scopes:
+`Models\ActivityLogEntry` has the morph relations `scope`, `subject`, `actor`, `relatedModels` (the `ActivityLogRelation` rows of related models), and these scopes:
 
 ```php
 ActivityLogEntry::inScope($business)
