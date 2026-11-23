@@ -46,7 +46,8 @@ return new class() extends Migration {
                 ->cascadeOnDelete();
             $table->morphs('related');
 
-            $table->unique(['activity_log_id', 'related_type', 'related_id']);
+            // Named: the generated name is 69 characters, over the 64 of MySQL and MariaDB.
+            $table->unique(['activity_log_id', 'related_type', 'related_id'], config('activity-log.relations_table', 'activity_log_relations').'_unique');
         });
     }
 
