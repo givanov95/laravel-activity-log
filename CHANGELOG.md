@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-23
+
+### Fixed
+- The migration failed on MySQL and MariaDB: the generated name of the unique index on `activity_log_relations` was 69 characters, over their limit of 64. The index is now named `<relations_table>_unique`. An installation that ran the migration on another database keeps its index under the old name; nothing else changes.
+
 ## [1.0.0] - 2026-10-23
 
 ### Added
